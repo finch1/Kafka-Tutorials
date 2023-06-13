@@ -1,3 +1,11 @@
+## Kafka Cluster
+A cluster is a group of multiple brokers. Where a broker is a server/node. Brokers receive and send data.
+A broker is identified with an integer ID. 
+Each broker will contain certain topic partitions.
+Brokers are self identifiable to the clusters, it is only necessary to connect to one broker.
+Same topic can be distributed/scaled across different brokers/servers
+
+<img src="Fig J.png">
 
 <img width="1000" src="Fig R.png">
 
@@ -16,15 +24,16 @@ The producer generates a message to a specific topic. By default, the producer w
 A single Kafka server is called a broker. Messages are received from producers, assigned offset and stored to disk. Brokers are designed to operate as part of a **cluster**, where one broker functions as the controller by election. This controller is responsible for admin ops: assigning partitions to brokers and monitoring for broker failures. A partition is owned by one leader in a broker. Replication is assigned to additional brokers called **followers** of the partition. message retention is either by period or storage limit, messages expire and get deleted thereafter. Or also by key, keeping only the latest one. Consumers can reset offset and start reading from beginning. 
 
 ## Kafka Topics
-*Topics* are a particular *stream* of data. Topics are identified by their *names*. The *sequence* of messages are called streams. Topics cannot be *queried*.
-Topics are *immutable*. Once data is written to a partition, it cannot be changed.
-Data is only *kept* for a default of one week, and is also configurable.
-
+- *Topics* are a particular *stream* of data. Topics are identified by their *names*. The *sequence* of messages are called streams. Topics cannot be *queried*.    
+- Topics are *immutable*. Once data is written to a partition, it cannot be changed.    
+- Data is only *kept* for a default of one week, and is also configurable.    
+- Topics are essentially an append-only log.    
 ## Partitions and Offsets
-Topics are split in *partitions*. *Messages* in each partition are *ordered* and given an incremental *offset* value.
-Offsets only have a *meaning* in the partition and so order is only guaranteed in that partition. The same sequence is used across all partitions.
-Offsets are not reused once message is *removed*. Similar to table PK. 
-Data is randomly assigned to the topic's paritions, unless a key is provided.
+- Topics are split in *partitions*.     
+- *Messages* in each partition are *ordered* and given an incremental *offset* value.   
+- Offsets only have a *meaning* in the partition and so order is only guaranteed in that partition. The same sequence is used across all partitions.    
+- Offsets are not reused once message is *removed*. Similar to table PK.    
+- Data is randomly assigned to the topic's paritions, unless a key is provided.   
 
 <img src="Fig A.png">
 
@@ -34,7 +43,7 @@ In case of failure, Kafka and Producers help with recovery.
 
 - Producers may choose to send a key with the message (string, num, binary, etc)
 - All messages with that key will be routed to the same partition.
-- A key is typically sent to pserve order. Ex. messages by individual truck.
+- A key is typically sent to preserve order. Ex. messages by individual truck.
 - Round Robin -> Data is distributed across all partitions in a topic.
 - Key Based Ordering -> When we specify a key, then the same key is going to end up in the same partition
 
@@ -88,15 +97,6 @@ Consumer groups are a bunch of consumers grouped together for a purpose:
 - Exactly once:
 - - For Kafka -> Kafka workflows (from topic to topic): use Transactional API (Kafka Streams API)
 
-## Kafka Cluster
-A cluster is a group of multiple brokers. Where a broker is a server/node. Brokers receive and send data.
-A broker is identified with an integer ID. 
-Each broker will contain certain topic partitions.
-Brokers are self identifiable to the clusters, it is only necessary to connect to one broker.
-Same topic can be distributed/scaled across different brokers/servers
-
-<img src="Fig J.png">
-
 ## Topic Replication Factor
 Replication should be set to at least 2 or 3. In case of failure, systems can keep functioning.
 At any one time, only ONE broker can be a leader for a given partition.
@@ -107,10 +107,10 @@ Kafka now allows consumers to read from a replica, perhaps its closer to the con
 <img src="Fig K.png">
 
 ## Partition Acknoledgements
-Producers can choose to receive ack for data writes:
-acks0 = Producers won't wait for acks (potential data loss)
-acks1 = Producers will wait for leader acks (few data loss)
-acksAll = Producers will wait for leader and replica acks (no data loss)
+Producers can choose to receive ack for data writes:    
+- acks0 = Producers won't wait for acks (potential data loss)
+- acks1 = Producers will wait for leader acks (few data loss)
+- acksAll = Producers will wait for leader and replica acks (no data loss)
 
 ## Installin Kafk on Ub
 Following Vid 23, 32:
@@ -127,7 +127,51 @@ Followed to copy paste bidir:
 - to find the installation media: vboxuser@Ubuntu:/media/vboxuser/VBox_GAs_7.0.4$ 
 - to install the media: vboxuser@Ubuntu:/media/vboxuser/VBox_GAs_7.0.4$ sudo sh VBoxLinuxAdditions.run
 
-## CLI Commands
+### Sticky Partitioner
+<img src="Fig N.png">
+
+### Sending with Key
+<img src="Fig O.png">
+
+### Consumer Group and Partition Rebalance
+Whenever consumers join and leave groups, partitions are going to be reassigned. This is called rebalance.
+Rebalance/reassignment also happenes when new partitions are added to a topic
+
+- **Kafka Consumer**: partition.assignment.strategy
+  - *(Eager Rebalance Type) RangeAssignor*: assign partitions on a per-topic bases (can lead to imbalance)
+  - *(Eager Type) RoundRobin*: assign partitions across all topics in round-robin fashion, optimal balance
+  - *(Eager Type) StickyAssignor*: balanced like RoundRobin, and then minimizes partition movements when consumer join/leaves group in order to minimize movements
+  - *(Cooperative Rebalance Type) CooperativeStickyAssignor*: rebalance strategy is identical to Sticky Assignor but supports cooperative rebalances and therefore consumer can keep consuming from topic
+  - *The default assignor is [RangeAssignor, CooperativeStickyAssignor]*: which will use the RangeAssignor by default, but allows upgrading to CooperativeStickyAssignor with just a single roling bounce that removes the range assignor from the list. 
+
+  - **Kafka Connect**: Cooperative rebalance
+  - **Kafka Streams**: StreamsPartitionAssignor
+
+  <img src="Fig P.png">
+
+<img src="Fig Q.png">
+
+#### Static Group Membership
+- By default, when a consumer leaves a group, its partitions are revoked and reassigned
+- If it re-joins, it will have a new *member ID* and new partitions will be reassigned
+- If one specifies the *group.instance.id* it makes the consumer a **static member**
+- Upon leaving, the consumer has up to *session.timeout.ms* to join back and get back its partitions (else they will be re-assinged), without triggering a rebalance
+- This is helpful when consumers maintain local state and cache
+
+Kafka can aggregate a stream with KsqlDB and a consumer can subscribe to the results. 
+
+## Streams
+A stream is a an immutable, append-only collection that represents a series of historical facts, or events. Once a row is inserted into a stream, the row can never change. You can append new rows at the end of the stream, but you can’t update or delete existing rows.
+
+## Tables
+A table is a mutable collection that models change over time. It uses row keys to display the most recent data for each key. All but the newest rows for each key are deleted periodically. Also, each row has a timestamp, so you can define a windowed table which enables controlling how to group records that have the same key for stateful operations – like aggregations and joins – into time spans. Windows are tracked by record key.
+
+<br></br>
+<br></br>
+<br></br>
+<br></br>
+
+# CLI Commands
 **Start Kafka** 
 >kafka-server-start.sh ~/kafka_2.13-3.3.1/config/kraft/server.properties
 
@@ -231,36 +275,3 @@ Video 44
 Ctrl + click on object reveals definition.
 
 Ctrl + p reveals constructor args.
-
-### Sticky Partitioner
-<img src="Fig N.png">
-
-### Sending with Key
-<img src="Fig O.png">
-
-### Consumer Group and Partition Rebalance
-Whenever consumers join and leave groups, partitions are going to be reassigned. This is called rebalance.
-Rebalance/reassignment also happenes when new partitions are added to a topic
-
-- **Kafka Consumer**: partition.assignment.strategy
-  - *(Eager Rebalance Type) RangeAssignor*: assign partitions on a per-topic bases (can lead to imbalance)
-  - *(Eager Type) RoundRobin*: assign partitions across all topics in round-robin fashion, optimal balance
-  - *(Eager Type) StickyAssignor*: balanced like RoundRobin, and then minimizes partition movements when consumer join/leaves group in order to minimize movements
-  - *(Cooperative Rebalance Type) CooperativeStickyAssignor*: rebalance strategy is identical to Sticky Assignor but supports cooperative rebalances and therefore consumer can keep consuming from topic
-  - *The default assignor is [RangeAssignor, CooperativeStickyAssignor]*: which will use the RangeAssignor by default, but allows upgrading to CooperativeStickyAssignor with just a single roling bounce that removes the range assignor from the list. 
-
-  - **Kafka Connect**: Cooperative rebalance
-  - **Kafka Streams**: StreamsPartitionAssignor
-
-  <img src="Fig P.png">
-
-<img src="Fig Q.png">
-
-#### Static Group Membership
-- By default, when a consumer leaves a group, its partitions are revoked and reassigned
-- If it re-joins, it will have a new *member ID* and new partitions will be reassigned
-- If one specifies the *group.instance.id* it makes the consumer a **static member**
-- Upon leaving, the consumer has up to *session.timeout.ms* to join back and get back its partitions (else they will be re-assinged), without triggering a rebalance
-- This is helpful when consumers maintain local state and cache
-
-Kafka can aggregate a stream with KsqlDB and a consumer can subscribe to the results. 
