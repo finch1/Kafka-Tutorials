@@ -1,0 +1,106 @@
+# using images: create network, volumes and containers
+
+nano zk1.env
+ZOO_TICK_TIME=3000
+ZOO_INIT_LIMIT=5
+ZOO_SYNC_LIMIT=2
+ZOO_STANDALONE_ENABLED=true
+ZOO_ADMINSERVER_ENABLED=true
+ZOO_SERVERS=server.1=zookeeper1:2888:3888;2181 server.2=zookeeper2:2888:3888;2181 server.3=zookeeper3:2888:3888;2181
+ZOOKEEPER_CLIENT_PORT=2181
+ZOOKEEPER_SERVER_ID=1
+
+
+docker network create --driver bridge zk-cluster
+docker network ls | grep zookeeper
+
+mkdir Volumes/data/zookeeper1
+mkdir Volumes/datalog/zookeeper1
+mkdir Volumes/logs/zookeeper1
+mkdir Volumes/data/zookeeper2
+mkdir Volumes/datalog/zookeeper2
+mkdir Volumes/logs/zookeeper2
+mkdir Volumes/data/zookeeper3
+mkdir Volumes/datalog/zookeeper3
+mkdir Volumes/logs/zookeeper3
+
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/data/zookeeper1 --opt o=bind --name zookeeper1-dataDir
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/datalog/zookeeper1 --opt o=bind --name zookeeper1-dataLogDir
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/logs/zookeeper1 --opt o=bind --name zookeeper1-logs
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/data/zookeeper2 --opt o=bind --name zookeeper2-dataDir
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/datalog/zookeeper2 --opt o=bind --name zookeeper2-dataLogDir
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/logs/zookeeper2 --opt o=bind --name zookeeper2-logs
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/data/zookeeper3 --opt o=bind --name zookeeper3-dataDir
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/datalog/zookeeper3 --opt o=bind --name zookeeper3-dataLogDir
+docker volume create --driver local --opt type=none --opt device=${PWD}/Volumes/logs/zookeeper3 --opt o=bind --name zookeeper3-logs
+
+docker volume ls | grep zookeeper
+
+docker run --rm -p 2182:2181 -p 8882:8080 --env-file zk1.env --mount source=zookeeper1-dataDir,target=/data --mount source=zookeeper1-dataLogDir,target=/datalog --mount source=zookeeper1-logs,target=/logs --name zookeeper1 --network zk-cluster confluentinc/cp-zookeeper:latest
+docker run --rm -p 2183:2181 -p 8883:8080 --env-file zk2.env --mount source=zookeeper2-dataDir,target=/data --mount source=zookeeper2-dataLogDir,target=/datalog --mount source=zookeeper2-logs,target=/logs --name zookeeper2 --network zk-cluster confluentinc/cp-zookeeper:latest
+docker run --rm -p 2184:2181 -p 8884:8080 --env-file zk3.env --mount source=zookeeper3-dataDir,target=/data --mount source=zookeeper3-dataLogDir,target=/datalog --mount source=zookeeper3-logs,target=/logs --name zookeeper3 --network zk-cluster confluentinc/cp-zookeeper:latest
+
+# the zkCli did not work
+docker run -it --rm --network zk-cluster --link zookeeper1:zookeeper1 confluentinc/cp-zookeeper:latest zkCli.sh -server "zookeeper1:2181,zookeeper2:2181,zookeeper3:2181"
+
+--------------------------------------------------------------------------------
+# clickhouse
+docker run -d -v ${PWD}/DockerCompose/ch_data:/var/lib/clickhouse/ -v ${PWD}/DockerCompose/ch_logs:/var/log/clickhouse-server/ -p 18123:8123 -p19000:9000 --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
+
+--------------------------------------------------------------------------------
+https://www.baeldung.com/kafka-shift-from-zookeeper-to-kraft
+https://www.howtoforge.com/how-to-install-apache-zookeeper-on-debian-10/
+https://github.com/svlady/alpine-zookeeper/blob/master/Dockerfile
+
+# install in debian
+docker run -it debian
+apt update -y
+apt upgrade -y
+apt install wget -y
+apt install nano -y
+
+apt-get install default-jdk -y
+java --version
+
+zooadmin
+
+cd /opt
+wget https://archive.apache.org/dist/zookeeper/zookeeper-3.8.1/apache-zookeeper-3.8.1-bin.tar.gz
+tar -xvzf apache-zookeeper-3.8.1-bin.tar.gz
+/opt# mv apache-zookeeper-3.8.1-bin zookeeper 
+/opt# chown -R zookeeper:zookeeper /opt/zookeeper 
+
+
+
+--------------------------------------------------------------------------------
+version: '3.8'
+services:
+  gamit:
+    image: myimage
+    volumes:
+      - app:/app
+volumes:
+  app:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/app
+      o: bind
+
+--------------------------------------------------------------------------------
+
+volumes:
+      - 'kafka-data:/var/lib/kafka/data'
+      - 'kafka-logs:/var/lib/kafka/logs'
+
+      volumes:
+  - ./controller.sh:/tmp/controller.sh
+command: bash -c '/tmp/controller.sh && /etc/confluent/docker/run'
+volumes:
+  - ./broker.sh:/tmp/broker.sh
+command: bash -c '/tmp/broker.sh && /etc/confluent/docker/run'
+volumes:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:
+  kafka-logs:
